@@ -1,10 +1,5 @@
-/*Write your name and student ID here */
-/*You must make sure your code is compliant with https://www.ietf.org/rfc/rfc1945.txt*/
-
-
-/*To compile and execute this code in linux run:
-   javac HttpServer.java
-   java HttpServer                         */
+/* Johnathan Kerssens - 301263314
+ * jkerssen@sfu.ca */
 
 
 import java.io.* ;
@@ -22,13 +17,11 @@ public final class HttpServer
         try
         {
             ServerSocket serverSocket = new ServerSocket(port);//Create listener
-            int numOpen = 0;
 
             while(true) {
                 System.out.println("Still waiting!");
                 Socket clientSocket = serverSocket.accept(); //Accept a connection
-                numOpen++;
-                HttpRequest request = new HttpRequest(clientSocket, numOpen);//Create a connection handler
+                HttpRequest request = new HttpRequest(clientSocket);//Create a connection handler
                 Thread service = new Thread(request);
                 service.start();
             }
@@ -46,16 +39,14 @@ final class HttpRequest implements Runnable
     // Track thread number for testing purposes
     private int num;
 
-    HttpRequest(Socket clientSocket, int num)
+    HttpRequest(Socket clientSocket)
     {
             this.clientSocket = clientSocket;
-            this.num = num;
     }
 
     //The client handling code will be written here
     public void run() {
         processRequest();
-        //System.out.println(String.format("Execution %s finished", num));
     }
 
     private void processRequest() {
@@ -72,9 +63,10 @@ final class HttpRequest implements Runnable
             System.out.println(String.format("Request is: \n%s", requestLine));
             StringTokenizer tokens = new StringTokenizer(requestLine);
             tokens.nextToken();
+            // Grab filename from request
             String fileName = "." + tokens.nextToken();
             String header;
-
+            // Print out all the headers in the request
             while (!(header = in.readLine()).isEmpty()) {
                 System.out.println(header);
             }
@@ -88,6 +80,7 @@ final class HttpRequest implements Runnable
                 fileExists = false;
             }
             if (!requestLine.matches("GET /.+\\..+ HTTP/1\\.\\d")){
+                // Check if the GET line in the request is correct. No need to check the headers as this server is minimal
                 badRequest = true;
             }
 
@@ -95,14 +88,17 @@ final class HttpRequest implements Runnable
             String contentTypeLine = "Content-Type: ";
             String respBody = null;
             if (fileExists && !badRequest) {
+                // If file exists and the format of the request is proper, send the file with status 200
                 statusLine += "200 OK";
                 contentTypeLine += contentType(fileName);
             } else if (badRequest){
+                // On bad request, send 400 status and plain text message
                 statusLine += "400 Bad Request";
                 contentTypeLine += "text/plain";
                 respBody = "Request should be 'GET /<file> HTTP/1.0\n";
 
             } else {
+                // When the request is good but the file does not exist, send status 404 Not Found
                 statusLine += "404 Not Found";
                 contentTypeLine += "text/html";
                 respBody = "<HTML>" +
@@ -112,7 +108,7 @@ final class HttpRequest implements Runnable
 
             writeHeader(out, statusLine, contentTypeLine);
             if (fileExists && !badRequest) {
-                // Send the file pointed to by 'fis' to the output stream 'out'
+                // Send the file contents to the client
                 sendBytes(fis, out);
             } else {
                 // Send a predefined string as the body
@@ -123,9 +119,12 @@ final class HttpRequest implements Runnable
             in.close();
             clientSocket.close();
         } catch (IOException io) {
+            // Log IOError to server log.
+            //io.printStackTrace();
             System.err.println(io.getMessage());
         } catch (Exception e) {
             if (out != null) {
+                // On any other exception, we attempt to send a 500 error to the client
                 writeHeader(out, "HTTP/1.0 500 Internal Server Error", "Content-Type: text/plain");
             }
         }
@@ -135,15 +134,19 @@ final class HttpRequest implements Runnable
         // Add CRLF at the end of the status line to indicate the line is ended
         statusLine += CRLF;
         try {
+            // Print the required HTTP response lines to be sent back to the client
+            // Along with two CRLFs as per RFC 1945
             out.writeBytes(statusLine);
             out.writeBytes(contentTypeLine + CRLF);
             out.writeBytes(CRLF);
         } catch (IOException io) {
+            // In case data cannot be written for any reason, log the error and the exception message
             System.err.println(String.format("Server could not send response:\n%s\n(%s)", statusLine, io.getMessage()));
         }
     }
 
     private static String contentType(String filename) {
+        // Return mimetype based on the file extension (A very small subset of mimetypes)
         if (filename.endsWith(".html") || filename.endsWith(".htm")) {
             return "text/html";
         }
@@ -160,19 +163,36 @@ final class HttpRequest implements Runnable
             return "image/gif";
         }
 
+        if (filename.endsWith(".ico")) {
+            return "image/x-icon";
+        }
+
         if (filename.endsWith(".mp4")) {
             return "video/mp4";
+        }
+
+        if (filename.endsWith(".avi")) {
+            return "video/avi";
+        }
+
+        if (filename.endsWith(".mp3")) {
+            return "audio/mpeg";
+        }
+
+        if (filename.endsWith(".wav")) {
+            return "audio/vnd.wav";
         }
         return "application/octet-stream";
     }
 
     private static void sendBytes(FileInputStream fis, DataOutputStream out) throws IOException{
+        // Writ the file pointed to by 'fis' to the socket's outputstream 'out'
         byte[] outBuf = new byte[1024];
         int bytes;
         while ((bytes = fis.read(outBuf)) != -1) {
             out.write(outBuf, 0, bytes);
         }
-        out.flush();
+        //out.flush();
 
     }
 }
